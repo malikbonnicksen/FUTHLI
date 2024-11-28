@@ -1,61 +1,56 @@
-import pandas as pd
+import csv
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 
-def select_file(file_type):
-    file_path = filedialog.askopenfilename(filetypes=[(file_type.upper(), f"*.{file_type}")])
-    return file_path
+def read_csv(file_path, columns):
+    with open(file_path, mode='r', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        # Print out the column names for debugging
+        print(f"Columns in {file_path}: {reader.fieldnames}")
+        data = []
+        for row in reader:
+            print(f"Row: {row}")  # Debugging: print each row
+            data.append({col: row[col].strip() for col in columns})
+        return data
 
-def save_file(content, file_type):
-    file_path = filedialog.asksaveasfilename(defaultextension=file_type, filetypes=[(file_type.upper(), f"*.{file_type}")])
-    if file_path:
-        with open(file_path, 'w') as f:
-            f.write(content)
-        messagebox.showinfo("Success", f"File saved as {file_path}")
+def save_csv(file_path, data, fieldnames):
+    with open(file_path, mode='w', encoding='utf-8', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(data)
 
 def main():
     root = tk.Tk()
-    root.withdraw()  # Hide the root window
+    root.withdraw()  # Hide the main window
 
-    # Select the CSV files for the last two months
-    messagebox.showinfo("Select File", "Select the log file for the first month")
-    file_month1 = select_file('csv')
-    messagebox.showinfo("Select File", "Select the log file for the second month")
-    file_month2 = select_file('csv')
+    # Step 1: Get ADUsers files
+    ad_file1 = filedialog.askopenfilename(title="Select the first ADUsers .csv file")
+    ad_file2 = filedialog.askopenfilename(title="Select the second ADUsers .csv file")
 
-    # Read the CSV files
-    df_month1 = pd.read_csv(file_month1)
-    df_month2 = pd.read_csv(file_month2)
+    # Step 2: Combine ADUsers lists
+    ad_users1 = read_csv(ad_file1, ['GivenName', 'Surname'])
+    ad_users2 = read_csv(ad_file2, ['GivenName', 'Surname'])
+    combined_ad_users = {f"{user['GivenName']} {user['Surname']}" for user in ad_users1 + ad_users2}
+    combined_ad_users = [{'GivenName': name.split()[0], 'Surname': name.split()[1]} for name in combined_ad_users]
 
-    # Extract unique user IDs from both months
-    unique_users_month1 = set(df_month1['User ID'].unique())
-    unique_users_month2 = set(df_month2['User ID'].unique())
+    save_path = filedialog.asksaveasfilename(title="Save the combined ADUsers file", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    save_csv(save_path, combined_ad_users, ['GivenName', 'Surname'])
 
-    # Combine the unique user IDs from both months
-    active_users = unique_users_month1.union(unique_users_month2)
+    # Step 3: Get EntraID files
+    entra_file1 = filedialog.askopenfilename(title="Select the first EntraID .csv file")
+    entra_file2 = filedialog.askopenfilename(title="Select the second EntraID .csv file")
 
-    # Select the AD users xlsx file
-    messagebox.showinfo("Select File", "Select the AD users file")
-    ad_users_file = select_file('xlsx')
-    
-    # Read the list of all AD users
-    ad_users = pd.read_excel(ad_users_file)
-    all_ad_users = set(ad_users['User ID'].unique())
+    # Step 4: Extract unique 'User' names from EntraID files
+    entra_users1 = read_csv(entra_file1, ['User'])
+    entra_users2 = read_csv(entra_file2, ['User'])
+    unique_entra_users = {user['User'] for user in entra_users1 + entra_users2}
 
-    # Identify inactive users
-    inactive_users = all_ad_users - active_users
+    # Step 5: Compare ADUsers with EntraID users
+    ad_usernames = {f"{user['GivenName']} {user['Surname']}" for user in combined_ad_users}
+    common_users = [{'GivenName': name.split()[0], 'Surname': name.split()[1]} for name in ad_usernames if name in unique_entra_users]
 
-    # Convert inactive users to a string format for saving
-    inactive_users_str = "\n".join(inactive_users)
-
-    # Ask user to save the output as .txt or .csv
-    file_type = messagebox.askquestion("Save As", "Save output as .txt or .csv?", icon='question', type='yesno')
-    
-    if file_type == 'yes':
-        save_file(inactive_users_str, 'txt')
-    else:
-        inactive_users_df = pd.DataFrame(list(inactive_users), columns=['User ID'])
-        save_file(inactive_users_df.to_csv(index=False), 'csv')
+    save_path = filedialog.asksaveasfilename(title="Save the comparison result file", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    save_csv(save_path, common_users, ['GivenName', 'Surname'])
 
 if __name__ == "__main__":
     main()
